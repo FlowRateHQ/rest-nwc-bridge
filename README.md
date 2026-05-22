@@ -212,3 +212,44 @@ Content-Type: application/json
 ```
 
 If the webhook endpoint is unreachable, the bridge logs a warning and continues processing subsequent notifications.
+
+## Securing with nginx
+
+The bridge itself has no built-in authentication. In production, place it behind nginx and require a Bearer token:
+
+```nginx
+location /api/ {
+    if ($http_authorization != "Bearer YOUR_SECRET_TOKEN") {
+        return 401 '{"error": "unauthorized"}';
+    }
+    proxy_pass http://127.0.0.1:8080/;
+}
+```
+
+For multiple tokens, use a `map`:
+
+```nginx
+map $http_authorization $auth_valid {
+    "Bearer token1_abc" 1;
+    "Bearer token2_def" 1;
+    default             0;
+}
+
+server {
+    listen 443 ssl;
+    server_name bridge.example.com;
+
+    location / {
+        if ($auth_valid = 0) {
+            return 401 '{"error": "unauthorized"}';
+        }
+        proxy_pass http://127.0.0.1:8080/;
+    }
+}
+```
+
+Clients then pass the token in the `Authorization` header:
+
+```sh
+curl -H "Authorization: Bearer token1_abc" https://bridge.example.com/balance
+```
